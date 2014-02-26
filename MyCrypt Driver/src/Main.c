@@ -36,24 +36,26 @@ FAST_IO_DISPATCH g_fastIoDispatch =
 	NULL,
 	NULL,
 };
+PDEVICE_OBJECT             g_fdo;
+PFSFILTER_DEVICE_EXTENSION g_fdo_ext;
 
 NTSTATUS DriverEntry(
 	__inout PDRIVER_OBJECT  DriverObject,
 	__in    PUNICODE_STRING RegistryPath
 	)
 {
-	DbgPrint("My Filter started.\n");
+	DBG_PRINT(DBG_LEVEL_INFO, "Started driver loading routine.\n");
+	//__debugbreak();
 
 	NTSTATUS status = STATUS_SUCCESS;
 	ULONG    i = 0;
 
-	PDEVICE_OBJECT             fdo;
 	UNICODE_STRING             devName;
-	PFSFILTER_DEVICE_EXTENSION fdo_ext;
 	g_fsFilterDriverObject = DriverObject;
 
 	RtlInitUnicodeString(&devName, DEVNAME);
 
+	DBG_PRINT(DBG_LEVEL_INFO, "Creating control FDO...\n");
 	status = IoCreateDevice(
 		DriverObject,
 		sizeof(FSFILTER_DEVICE_EXTENSION),
@@ -61,18 +63,24 @@ NTSTATUS DriverEntry(
 		FILE_DEVICE_UNKNOWN,
 		0,
 		FALSE,
-		&fdo);
-	if (!NT_SUCCESS(status))
-		return status;
-
-	fdo_ext = (PFSFILTER_DEVICE_EXTENSION)fdo->DeviceExtension;
-	fdo_ext->AttachedToDeviceObject = NULL;
-
-	RtlInitUnicodeString(&fdo_ext->ustrSymLinkName, SYM_LINK_NAME);
-	status = IoCreateSymbolicLink(&fdo_ext->ustrSymLinkName, &devName);
+		&g_fdo);
 	if (!NT_SUCCESS(status))
 	{
-		IoDeleteDevice(fdo);
+		DBG_PRINT(DBG_LEVEL_WARN, "Could not create control FDO!\n");
+		return status;
+	}
+
+	g_fdo_ext = (PFSFILTER_DEVICE_EXTENSION)g_fdo->DeviceExtension;
+	g_fdo_ext->AttachedToDeviceObject = NULL;
+
+	RtlInitUnicodeString(&g_fdo_ext->ustrSymLinkName, SYM_LINK_NAME);
+	DBG_PRINT(DBG_LEVEL_INFO, "Creating symlink %wZ...\n", &g_fdo_ext->ustrSymLinkName);
+	status = IoCreateSymbolicLink(&g_fdo_ext->ustrSymLinkName, &devName);
+	if (!NT_SUCCESS(status))
+	{
+		DBG_PRINT(DBG_LEVEL_WARN, "Could not create symlink %wZ!\n", &g_fdo_ext->ustrSymLinkName);
+		DBG_PRINT(DBG_LEVEL_INFO, "Deleting control FDO...\n");
+		IoDeleteDevice(g_fdo);
 		return status;
 	}
 
@@ -86,26 +94,33 @@ NTSTATUS DriverEntry(
 	//  Initialize the driver object dispatch table.
 	//
 
+	DBG_PRINT(DBG_LEVEL_INFO, "Populating %i IRP Major handlers with FsFilterDispatchPassThrough...\n", IRP_MJ_MAXIMUM_FUNCTION);
 	for (i = 0; i <= IRP_MJ_MAXIMUM_FUNCTION; ++i)
 	{
 		DriverObject->MajorFunction[i] = FsFilterDispatchPassThrough;
 	}
 
+	DBG_PRINT(DBG_LEVEL_INFO, "Populating IRP_MJ_CREATE handler with FsFilterDispatchCreate...\n");
 	DriverObject->MajorFunction[IRP_MJ_CREATE] = FsFilterDispatchCreate;
 
 	//
 	// Set fast-io dispatch table.
 	//
 
+	DBG_PRINT(DBG_LEVEL_INFO, "Populating Fast-IO dispatch table...\n");
 	DriverObject->FastIoDispatch = &g_fastIoDispatch;
 
 	//
 	//  Registered callback routine for file system changes.
 	//
 
+	DBG_PRINT(DBG_LEVEL_INFO, "Registering FsFilterNotificationCallback for file system changes...\n");
 	status = IoRegisterFsRegistrationChange(DriverObject, FsFilterNotificationCallback);
 	if (!NT_SUCCESS(status))
 	{
+		DBG_PRINT(DBG_LEVEL_WARN, "Could not register callback routine for file system changes!\n");
+		DBG_PRINT(DBG_LEVEL_INFO, "Deleting control FDO...\n");
+		IoDeleteDevice(g_fdo);
 		return status;
 	}
 
@@ -113,14 +128,16 @@ NTSTATUS DriverEntry(
 	// Set driver unload routine (debug purpose only).
 	//
 
-	DriverObject->DriverUnload = FsFilterUnload;
+	//DriverObject->DriverUnload = FsFilterUnload;
 
+	DBG_PRINT(DBG_LEVEL_INFO, "Driver loaded.\n");
 	return STATUS_SUCCESS;
 }
 
 //////////////////////////////////////////////////////////////////////////
 // Unload routine
 
+/*
 VOID FsFilterUnload(
 	__in PDRIVER_OBJECT DriverObject
 	)
@@ -151,16 +168,33 @@ VOID FsFilterUnload(
 
 		numDevices = min(numDevices, RTL_NUMBER_OF(devList));
 
+		__debugbreak();
+		DbgPrint("Deleting symlink %wZ...\n", &g_fdo_ext->ustrSymLinkName);
+		IoDeleteSymbolicLink(&g_fdo_ext->ustrSymLinkName);
+
 		for (i = 0; i < numDevices; ++i)
 		{
+			OBJECT_NAME_INFORMATION name;
+			WCHAR buf[1024];
+			name.Name.Buffer = buf;
+			ULONG resultLength;
+			ObQueryNameString(devList[i], &name, 1024, &resultLength);
+			DbgPrint("%wZ\n", &name.Name);
 			FsFilterDetachFromDevice(devList[i]);
-			ObDereferenceObject(devList[i]);
+			if (devList[i] != g_fdo)
+				ObDereferenceObject(devList[i]);
+			else
+				DbgPrint("Control FDO met, no dereference\n");
 		}
 
 		interval.QuadPart = 5 * DELAY_ONE_SECOND;
 		KeDelayExecutionThread(KernelMode, FALSE, &interval);
+
+		DbgPrint("Driver unloaded.\n");
+		__debugbreak();
 	}
 }
+*/
 
 //////////////////////////////////////////////////////////////////////////
 // Misc

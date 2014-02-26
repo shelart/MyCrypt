@@ -7,8 +7,13 @@ NTSTATUS DriverEntry(
 	__inout PDRIVER_OBJECT  DriverObject,
 	__in    PUNICODE_STRING RegistryPath
 	);
+/*
 VOID FsFilterUnload(
 	__in PDRIVER_OBJECT DriverObject
+	);
+*/
+BOOLEAN FsFilterIsMyDeviceObject(
+	__in PDEVICE_OBJECT DeviceObject
 	);
 
 #endif

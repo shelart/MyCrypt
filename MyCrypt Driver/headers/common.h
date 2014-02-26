@@ -15,6 +15,7 @@
 #include <ntifs.h>
 #include <stdlib.h>
 #include <ntddk.h>
+#include <Ntstrsafe.h>
 #pragma warning(pop)
 
 #define DELAY_ONE_MICROSECOND   (-10)
@@ -28,6 +29,22 @@
 //name and symbolic link for FDO
 #define DEVNAME         L"\\Device\\FSFILTER"
 #define SYM_LINK_NAME   L"\\DosDevices\\FsFilter"
+
+// Debug print macro
+#define DBG_LEVEL_INFO  0  // just information
+#define DBG_LEVEL_NOTE  1  // note about possible further problems
+#define DBG_LEVEL_WARN  2  // problem caused to abort operation
+#define DBG_LEVEL_FATAL 3  // problem caused to stop OS
+#define DRVNAME         "MYCRYPT"
+#define DBG_PRINT_DBG_LEVEL_INFO(DUMMY, MESSAGE, ...) \
+	DbgPrint(DRVNAME ": INFO: " MESSAGE, ##__VA_ARGS__)
+#define DBG_PRINT_DBG_LEVEL_NOTE(DUMMY, MESSAGE, ...) \
+	DbgPrint(DRVNAME ": NOTE: " MESSAGE, ##__VA_ARGS__)
+#define DBG_PRINT_DBG_LEVEL_WARN(DUMMY, MESSAGE, ...) \
+	DbgPrint(DRVNAME ": WARN: " MESSAGE, ##__VA_ARGS__)
+#define DBG_PRINT_DBG_LEVEL_FATAL(DUMMY, MESSAGE, ...) \
+	DbgPrint(DRVNAME ": FATAL: " MESSAGE, ##__VA_ARGS__)
+#define DBG_PRINT(LEVEL, MESSAGE, ...) DBG_PRINT_##LEVEL(LEVEL, MESSAGE, ##__VA_ARGS__)
 
 //////////////////////////////////////////////////////////////////////////
 // Structures
